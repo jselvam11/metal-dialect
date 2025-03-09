@@ -38,6 +38,7 @@ clang $assembly_file $runtime_file \
   -L/usr/lib/swift \
   -L$(xcode-select -p)/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift/macosx \
   -framework CoreGraphics \
+  -isysroot $(xcrun --show-sdk-path) \
   -o $binary_file
 
 # Remove tmp files

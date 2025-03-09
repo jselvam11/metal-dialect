@@ -52,3 +52,70 @@ void MetalMemRefType::print(mlir::AsmPrinter &printer) const {
     printer << "?";
   printer << " x " << memRef.getType() << ">";
 }
+
+
+//===----------------------------------------------------------------------===//
+// MetalPtrType Implementation
+//===----------------------------------------------------------------------===//
+
+mlir::Type MetalPtrType::parse(mlir::AsmParser &parser) {
+  Type pointeeType;
+  uint32_t addressSpace = 0;
+  
+  if (parser.parseLess() || 
+      parser.parseType(pointeeType) ||
+      parser.parseComma() ||
+      parser.parseInteger(addressSpace) ||
+      parser.parseGreater())
+    return Type();
+    
+  return MetalPtrType::get(parser.getContext(), pointeeType, addressSpace);
+}
+
+void MetalPtrType::print(mlir::AsmPrinter &printer) const {
+  printer << "ptr<" << getPointeeType() << ", " << getAddressSpace() << ">";
+}
+
+//===----------------------------------------------------------------------===//
+// MetalTensorType Implementation
+//===----------------------------------------------------------------------===//
+
+mlir::Type MetalTensorType::parse(mlir::AsmParser &parser) {
+  Type elementType;
+  llvm::SmallVector<int64_t, 4> shape;
+  Attribute layout;
+  
+  if (parser.parseLess() || 
+      parser.parseType(elementType) ||
+      parser.parseComma() ||
+      parser.parseDimensionList(shape))
+    return Type();
+
+  // Parse optional layout
+  if (succeeded(parser.parseOptionalComma())) {
+    if (parser.parseAttribute(layout))
+      return Type();
+  } else {
+    // Default empty layout
+    layout = parser.getBuilder().getUnitAttr();
+  }
+  
+  if (parser.parseGreater())
+    return Type();
+    
+  return MetalTensorType::get(parser.getContext(), elementType, shape, layout);
+}
+
+void MetalTensorType::print(mlir::AsmPrinter &printer) const {
+  printer << "tensor<" << getElementType() << ", [";
+  llvm::interleaveComma(getShape(), printer);
+  printer << "]";
+  
+  // Only print layout if it's not the default unit attribute
+  if (!getLayout().isa<UnitAttr>()) {
+    printer << ", ";
+    printer.printAttribute(getLayout());
+  }
+  
+  printer << ">";
+}

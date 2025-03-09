@@ -5,7 +5,7 @@ METAL_PRESET=debug
 
 LLVM_COMMIT=llvmorg-19.1.0
 LLVM_PRESET=release
-LLVM_BUILD_DIR=${LLVM_SRC_DIR}/build/${LLVM_PRESET}
+LLVM_BUILD_DIR=/Users/jeevaselvam/triton/llvm-project/build
 LLVM_PYTHON_ENV=${HOME}/.venv/mlirdev
 
 # _____________________________________________________________________________
@@ -126,7 +126,7 @@ metal-clean:
 .PHONY: metal-generate-presets - Generate Metal CMake Presets.
 metal-generate-presets:
 	echo "Metal - Generate Presets"
-	echo $$CMAKE_PRESETS_TEMPLATE > ./CMakeUserPresets.json
+	echo $$CMAKE_PRESETS_CUSTOM > ./CMakeUserPresets.json
 
 .PHONY: metal-generate-project - Generate Metal Project.
 metal-generate-project:
@@ -146,8 +146,8 @@ metal-build-mlir:
 
 .PHONY: metal-build-runtime - Build Metal Runtime.
 metal-build-runtime:
-	echo "Metal - Build Runtime"
-	cd ${RUNTIME} && swift build -c release
+	echo "Metal - Build Runtime with system clang for Objective-C"
+	cd ${RUNTIME} && CC=/usr/bin/clang CXX=/usr/bin/clang++ swift build -c release
 
 # _____________________________________________________________________________
 # Targets - Metal - Examples
@@ -158,9 +158,10 @@ metal-build-examples:	metal-build-runtime-example \
 						metal-build-example-life5x5 \
 						metal-build-example-life100000000x5
 
-.PHONY: metal-build-runtime-example - Build Metal Runtime Example.
+.PHONY: metal-build-runtime-example - Build Metal Runtime Example with system clang.
 metal-build-runtime-example:
-	echo "Metal - Build Runtime Example"
+	echo "Metal - Build Runtime Example with system clang"
+	env CC=/usr/bin/clang CXX=/usr/bin/clang++ TOOLCHAINS=com.apple.dt.toolchain.XcodeDefault \
 	xcodebuild -project ./examples/MetalRuntimeExample/MetalRuntimeExample.xcodeproj \
 		-scheme MetalRuntimeExample
 
@@ -220,8 +221,8 @@ define CMAKE_PRESETS_TEMPLATE
 				"MLIR_DIR": "${LLVM_BUILD_DIR}/lib/cmake/mlir",
 				"LLVM_EXTERNAL_LIT": "${LLVM_BUILD_DIR}/bin/llvm-lit",
 				"Python3_EXECUTABLE": "${LLVM_PYTHON_ENV}/bin/python3",
-				"CMAKE_C_COMPILER": "/usr/bin/clang",
-                "CMAKE_CXX_COMPILER": "/usr/bin/clang++",
+				"CMAKE_C_COMPILER": "${LLVM_CC}",
+                "CMAKE_CXX_COMPILER": "${LLVM_CXX}",
 				"CMAKE_EXPORT_COMPILE_COMMANDS": "ON"
             }
         },
@@ -253,3 +254,53 @@ define CMAKE_PRESETS_TEMPLATE
 }
 endef
 export CMAKE_PRESETS_TEMPLATE
+
+
+define CMAKE_PRESETS_CUSTOM
+{
+    "version": 3,
+    "configurePresets": [
+        {
+            "name": "default",
+            "hidden": true,
+            "displayName": "Custom configure preset",
+            "description": "Custom configure preset",
+            "generator": "Ninja",
+            "binaryDir": "./build/$${presetName}",
+            "cacheVariables": {
+				"MLIR_DIR": "/Users/jeevaselvam/triton/llvm-project/build/lib/cmake/mlir",
+				"LLVM_EXTERNAL_LIT": "/Users/jeevaselvam/triton/llvm-project/build/bin/llvm-lit",
+				"Python3_EXECUTABLE": "/Users/jeevaselvam/miniconda3/envs/triton-metal/bin/python3",
+				"CMAKE_C_COMPILER": "/Users/jeevaselvam/triton/llvm-project/build/bin/clang",
+                "CMAKE_CXX_COMPILER": "/Users/jeevaselvam/triton/llvm-project/build/bin/clang++",
+				"CMAKE_EXPORT_COMPILE_COMMANDS": "ON"
+            }
+        },
+ 		{
+            "name": "debug",
+            "inherits": "default",
+            "displayName": "Debug",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Debug"
+            }
+        },
+        {
+            "name": "release",
+            "inherits": "default",
+            "displayName": "Release",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Release"
+            }
+        },
+        {
+            "name": "relWithDebInfo",
+            "inherits": "default",
+            "displayName": "RelWithDebInfo",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "RelWithDebInfo"
+            }
+        }
+    ]
+}
+endef
+export CMAKE_PRESETS_CUSTOM

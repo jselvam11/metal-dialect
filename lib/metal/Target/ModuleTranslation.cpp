@@ -331,3 +331,175 @@ void ModuleTranslation::translate(mlir::metal::BinaryExpOp op) {
 void ModuleTranslation::translate(mlir::metal::YieldWhileOp op) {
   translateValue(op.getCondition().getDefiningOp());
 }
+
+void ModuleTranslation::translate(mlir::metal::GetProgramIdOp op) {
+  _output << "uint3 threadgroup_position = metal::threadgroup_position_in_grid();\n";
+  _output << "uint pos = threadgroup_position." << op.getDimension();
+}
+
+void ModuleTranslation::translate(mlir::metal::MakeRangeOp op) {
+  auto start = op.getStart();
+  auto end = op.getEnd();
+  auto resultTy = llvm::cast<MetalTensorType>(op.getResult().getType());
+  auto shape = resultTy.getShape();
+
+  _output << "// range tensor with " << shape[0] << " elements\n";
+  
+  // In Metal, we'll unroll this into a vector or array
+  _output << "int range[" << shape[0] << "];\n";
+  _output << "for (int i = 0; i < " << shape[0] << "; i++) {\n";
+  _output << "  range[i] = " << start << " + i;\n";
+  _output << "}\n";
+}
+
+void ModuleTranslation::translate(mlir::metal::SplatOp op) {
+  auto resultTy = llvm::cast<MetalTensorType>(op.getResult().getType());
+  auto shape = resultTy.getShape();
+  auto elementTy = resultTy.getElementType();
+  
+  _output << "// splat to tensor with " << shape[0] << " elements\n";
+  
+  // In Metal, we'll unroll this into a vector or array
+  _output << typeToString(elementTy) << " splat[" << shape[0] << "];\n";
+  _output << "for (int i = 0; i < " << shape[0] << "; i++) {\n";
+  _output << "  splat[i] = ";
+  translateValue(op.getScalar().getDefiningOp());
+  _output << ";\n";
+  _output << "}\n";
+}
+
+void ModuleTranslation::translate(mlir::metal::AddPtrOp op) {
+  auto resultTy = llvm::cast<MetalTensorType>(op.getResult().getType());
+  auto shape = resultTy.getShape();
+  
+  _output << "// pointer addition with " << shape[0] << " elements\n";
+  
+  // In Metal, we'll compute pointer addition for each element
+  _output << "device void* ptrs[" << shape[0] << "];\n";
+  _output << "for (int i = 0; i < " << shape[0] << "; i++) {\n";
+  _output << "  ptrs[i] = static_cast<device void*>(static_cast<device char*>(";
+  translateValue(op.getPointers().getDefiningOp());
+  _output << "[i]) + (";
+  translateValue(op.getOffsets().getDefiningOp());
+  _output << "[i] * sizeof(";
+  
+  // Get pointee type for pointer size
+  auto ptrTy = llvm::cast<MetalTensorType>(op.getPointers().getType());
+  auto elementPtrTy = llvm::cast<MetalPtrType>(ptrTy.getElementType());
+  _output << typeToString(elementPtrTy.getPointeeType()) << ")));\n";
+  _output << "}\n";
+}
+
+void ModuleTranslation::translate(mlir::metal::TensorLoadOp op) {
+  auto resultTy = llvm::cast<MetalTensorType>(op.getResult().getType());
+  auto shape = resultTy.getShape();
+  auto elementTy = resultTy.getElementType();
+  
+  _output << "// vectorized load with " << shape[0] << " elements\n";
+  
+  // In Metal, we'll load each element if the mask allows
+  _output << typeToString(elementTy) << " loaded[" << shape[0] << "];\n";
+  _output << "for (int i = 0; i < " << shape[0] << "; i++) {\n";
+  _output << "  if (";
+  translateValue(op.getMask().getDefiningOp());
+  _output << "[i]) {\n";
+  _output << "    loaded[i] = *(static_cast<device " << typeToString(elementTy) << "*>(";
+  translateValue(op.getPointers().getDefiningOp());
+  _output << "[i]));\n";
+  _output << "  } else {\n";
+  _output << "    loaded[i] = (" << typeToString(elementTy) << ")0;\n";
+  _output << "  }\n";
+  _output << "}\n";
+}
+
+void ModuleTranslation::translate(mlir::metal::TensorStoreOp op) {
+  auto pointersTy = llvm::cast<MetalTensorType>(op.getPointers().getType());
+  auto shape = pointersTy.getShape();
+  
+  _output << "// vectorized store with " << shape[0] << " elements\n";
+  
+  // In Metal, we'll store each element if the mask allows
+  _output << "for (int i = 0; i < " << shape[0] << "; i++) {\n";
+  _output << "  if (";
+  translateValue(op.getMask().getDefiningOp());
+  _output << "[i]) {\n";
+  
+  // Get pointee type for properly casting the pointer
+  auto elementPtrTy = llvm::cast<MetalPtrType>(pointersTy.getElementType());
+  _output << "    *(static_cast<device " << typeToString(elementPtrTy.getPointeeType()) << "*>(";
+  translateValue(op.getPointers().getDefiningOp());
+  _output << "[i])) = ";
+  translateValue(op.getValues().getDefiningOp());
+  _output << "[i];\n";
+  _output << "  }\n";
+  _output << "}\n";
+}
+
+void ModuleTranslation::translate(mlir::metal::TensorBinaryOp op) {
+  auto resultTy = llvm::cast<MetalTensorType>(op.getResult().getType());
+  auto shape = resultTy.getShape();
+  auto elementTy = resultTy.getElementType();
+  
+  _output << "// element-wise binary operation with " << shape[0] << " elements\n";
+  
+  // In Metal, we'll compute each element
+  _output << typeToString(elementTy) << " result[" << shape[0] << "];\n";
+  _output << "for (int i = 0; i < " << shape[0] << "; i++) {\n";
+  _output << "  result[i] = (";
+  translateValue(op.getLhs().getDefiningOp());
+  _output << "[i]) ";
+  
+  // Output the proper operator
+  using OP = mlir::metal::BinaryExpOperator;
+  switch (op.getOpr()) {
+  case OP::addOp: _output << "+"; break;
+  case OP::subOp: _output << "-"; break;
+  case OP::mulOp: _output << "*"; break;
+  case OP::divOp: _output << "/"; break;
+  case OP::remOp: _output << "%"; break;
+  case OP::eqOp: _output << "=="; break;
+  case OP::neOp: _output << "!="; break;
+  case OP::ltOp: _output << "<"; break;
+  case OP::leOp: _output << "<="; break;
+  case OP::gtOp: _output << ">"; break;
+  case OP::geOp: _output << ">="; break;
+  case OP::andOp: _output << "&&"; break;
+  case OP::orOp: _output << "||"; break;
+  }
+  
+  _output << " (";
+  translateValue(op.getRhs().getDefiningOp());
+  _output << "[i]);\n";
+  _output << "}\n";
+}
+
+void ModuleTranslation::translate(mlir::metal::TensorUnaryOp op) {
+  auto resultTy = llvm::cast<MetalTensorType>(op.getResult().getType());
+  auto shape = resultTy.getShape();
+  auto elementTy = resultTy.getElementType();
+  
+  _output << "// element-wise unary operation with " << shape[0] << " elements\n";
+  
+  // In Metal, we'll compute each element
+  _output << typeToString(elementTy) << " result[" << shape[0] << "];\n";
+  _output << "for (int i = 0; i < " << shape[0] << "; i++) {\n";
+  
+  // Output the proper operator
+  using OP = mlir::metal::UnaryExpOperator;
+  switch (op.getOpr()) {
+  case OP::notOp:
+    _output << "  result[i] = !(";
+    translateValue(op.getInput().getDefiningOp());
+    _output << "[i]);\n";
+    break;
+  case OP::minusOp:
+    _output << "  result[i] = -(";
+    translateValue(op.getInput().getDefiningOp());
+    _output << "[i]);\n";
+    break;
+  default:
+    llvm_unreachable("Unknown unary operator");
+  }
+  
+  _output << "}\n";
+}

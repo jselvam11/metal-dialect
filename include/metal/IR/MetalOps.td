@@ -444,4 +444,106 @@ def CommandBufferWaitUntilCompletedOp : Metal_Op<"command_buffer_wait_until_comp
   let assemblyFormat = "$commandBuffer attr-dict `:` type(operands)";
 }
 
+//===----------------------------------------------------------------------===//
+// Program ID Operation
+//===----------------------------------------------------------------------===//
+
+def GetProgramIdOp : Metal_Op<"get_program_id", [Pure]> {
+  let summary = "Get program ID (grid position)";
+  let arguments = (ins StrAttr:$dimension); // "x", "y", or "z"
+  let results = (outs SI32:$result);
+  let hasVerifier = 1;
+
+  let assemblyFormat = "$dimension attr-dict `:` type(results)";
+}
+
+//===----------------------------------------------------------------------===//
+// Range Operation
+//===----------------------------------------------------------------------===//
+
+def MakeRangeOp : Metal_Op<"make_range", [Pure]> {
+  let summary = "Create a tensor with sequential values";
+  let arguments = (ins I32Attr:$start, I32Attr:$end);
+  let results = (outs Metal_TensorType:$result);
+
+  let assemblyFormat = "attr-dict `{` `start` `=` $start `:` `i32` `,` `end` `=` $end `:` `i32` `}` `:` type(results)";
+}
+
+//===----------------------------------------------------------------------===//
+// Splat Operation
+//===----------------------------------------------------------------------===//
+
+def SplatOp : Metal_Op<"splat", [Pure]> {
+  let summary = "Broadcast a scalar to all elements of a tensor";
+  let arguments = (ins AnyType:$scalar);
+  let results = (outs Metal_TensorType:$result);
+
+  let builders = [
+    OpBuilder<(ins "Value":$scalar, "Type":$resultType)>
+  ];
+
+  let assemblyFormat = "$scalar attr-dict `:` type(operands) `->` type(results)";
+}
+
+//===----------------------------------------------------------------------===//
+// Pointer Arithmetic Operations
+//===----------------------------------------------------------------------===//
+
+def AddPtrOp : Metal_Op<"addptr", [Pure]> {
+  let summary = "Add tensor of pointers with tensor of offsets";
+  let arguments = (ins Metal_TensorType:$pointers, Metal_TensorType:$offsets);
+  let results = (outs Metal_TensorType:$result);
+  let hasVerifier = 1;
+
+  let assemblyFormat = "$pointers `,` $offsets attr-dict `:` functional-type(operands, results)";
+}
+
+//===----------------------------------------------------------------------===//
+// Memory Access Operations
+//===----------------------------------------------------------------------===//
+
+def TensorLoadOp : Metal_Op<"tensor_load", [Pure]> {
+  let summary = "Load from tensor of pointers with mask";
+  let arguments = (ins Metal_TensorType:$pointers, Metal_TensorType:$mask);
+  let results = (outs Metal_TensorType:$result);
+  let hasVerifier = 1;
+  let assemblyFormat = "$pointers `,` $mask attr-dict `:` functional-type(operands, results)";
+}
+
+def TensorStoreOp : Metal_Op<"tensor_store"> {
+  let summary = "Store to tensor of pointers with mask";
+  let arguments = (ins Metal_TensorType:$pointers, Metal_TensorType:$values, Metal_TensorType:$mask);
+  let hasVerifier = 1;
+  let assemblyFormat = "$pointers `,` $values `,` $mask attr-dict `:` type(operands)";
+}
+
+//===----------------------------------------------------------------------===//
+// Tensor Element-wise Operations
+//===----------------------------------------------------------------------===//
+
+def TensorBinaryOp : Metal_Op<"tensor_binary", [Pure]> {
+  let summary = "Element-wise binary operation on tensors";
+  let arguments = (ins 
+    BinaryExpOperator:$opr, // Changed from $operator
+    Metal_TensorType:$lhs, 
+    Metal_TensorType:$rhs
+  );
+  let results = (outs Metal_TensorType:$result);
+  let hasVerifier = 1;
+  
+  let assemblyFormat = "$lhs `,` $rhs `,` $opr attr-dict `:` functional-type(operands, results)";
+}
+
+def TensorUnaryOp : Metal_Op<"tensor_unary", [Pure]> {
+  let summary = "Element-wise unary operation on tensors";
+  let arguments = (ins 
+    UnaryExpOperator:$opr, // Changed from $operator
+    Metal_TensorType:$input
+  );
+  let results = (outs Metal_TensorType:$result);
+  let hasVerifier = 1;
+  
+  let assemblyFormat = "$input `,` $opr attr-dict `:` functional-type(operands, results)";
+}
+
 #endif // METAL_OPS

@@ -62,6 +62,15 @@ private:
   void translate(mlir::metal::UnaryExpOp op);
   void translate(mlir::metal::BinaryExpOp op);
   void translate(mlir::metal::YieldWhileOp op);
+
+  void translate(mlir::metal::GetProgramIdOp op);
+  void translate(mlir::metal::MakeRangeOp op);
+  void translate(mlir::metal::SplatOp op);
+  void translate(mlir::metal::AddPtrOp op);
+  void translate(mlir::metal::TensorLoadOp op);  // Note: renamed from LoadOp
+  void translate(mlir::metal::TensorStoreOp op); // Note: renamed from StoreOp
+  void translate(mlir::metal::TensorBinaryOp op);
+  void translate(mlir::metal::TensorUnaryOp op);
 };
 
 } // end namespace metal

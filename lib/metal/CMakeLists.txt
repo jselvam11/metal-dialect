@@ -8,6 +8,11 @@ add_mlir_dialect_library(MLIRMetal
 		Conversion/ConvertMetalToLLVM.cpp
 		Conversion/MetalToLLVM.cpp
 
+		# # Triton Conversion
+		# ${LIB_HEADERS}/Conversion/TritonToMetal/TritonToMetal.h
+		# Conversion/TritonToMetal/ConvertTritonToMetal.cpp
+		# Conversion/TritonToMetal/TritonToMetal.cpp
+
 		# IR
 		${LIB_HEADERS}/IR/MetalDialect.h
 		IR/MetalDialect.cpp
@@ -27,7 +32,12 @@ add_mlir_dialect_library(MLIRMetal
 		MLIRMetalOpsEnumsGen
 		MLIRMetalConversionPassIncGen
 
+		# MLIRTritonToMetalPassIncGen
+
 		LINK_LIBS PUBLIC
 		MLIRIR
+		# MLIRTritonDialect
 		${conversion_libs}
 )
+
+# add_subdirectory(TritonToMetal)

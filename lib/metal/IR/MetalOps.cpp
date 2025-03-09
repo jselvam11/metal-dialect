@@ -13,6 +13,7 @@
 #include "mlir/IR/OpImplementation.h"
 
 using namespace mlir::metal;
+using namespace mlir;
 
 //===----------------------------------------------------------------------===//
 // ModuleOp
@@ -570,6 +571,220 @@ CommandQueueMakeCommandBufferOp::parse(mlir::OpAsmParser &parser,
 
   return parser.resolveOperands(operands, operandTypes,
                                 parser.getCurrentLocation(), result.operands);
+}
+
+//===----------------------------------------------------------------------===//
+// GetProgramIdOp Implementation
+//===----------------------------------------------------------------------===//
+
+LogicalResult GetProgramIdOp::verify() {
+  auto dim = getDimension();
+  if (dim != "x" && dim != "y" && dim != "z")
+    return emitOpError() << "dimension must be 'x', 'y', or 'z', but got '" << dim << "'";
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
+// MakeRangeOp Implementation
+//===----------------------------------------------------------------------===//
+
+// No additional verification needed
+
+//===----------------------------------------------------------------------===//
+// SplatOp Implementation
+//===----------------------------------------------------------------------===//
+
+void SplatOp::build(OpBuilder &builder, OperationState &result, Value scalar, Type resultType) {
+  result.addOperands(scalar);
+  result.addTypes(resultType);
+}
+
+//===----------------------------------------------------------------------===//
+// AddPtrOp Implementation
+//===----------------------------------------------------------------------===//
+
+LogicalResult AddPtrOp::verify() {
+  auto pointersType = llvm::dyn_cast<MetalTensorType>(getPointers().getType());
+  auto offsetsType = llvm::dyn_cast<MetalTensorType>(getOffsets().getType());
+  auto resultType = llvm::dyn_cast<MetalTensorType>(getResult().getType());
+  
+  if (!pointersType || !offsetsType || !resultType)
+    return emitOpError() << "all operands and results must be tensor types";
+  
+  // Check that shapes match
+  if (pointersType.getShape() != offsetsType.getShape() || 
+      pointersType.getShape() != resultType.getShape())
+    return emitOpError() << "all tensors must have the same shape";
+  
+  // Check that pointers tensor contains pointers
+  auto pointersElementType = llvm::dyn_cast<MetalPtrType>(pointersType.getElementType());
+  if (!pointersElementType)
+    return emitOpError() << "pointers operand must be a tensor of pointers";
+  
+  // Check that offsets tensor contains integers
+  auto offsetsElementType = offsetsType.getElementType();
+  if (!offsetsElementType.isIntOrIndex())
+    return emitOpError() << "offsets operand must be a tensor of integers";
+  
+  // Check that result tensor contains pointers of the same type
+  auto resultElementType = llvm::dyn_cast<MetalPtrType>(resultType.getElementType());
+  if (!resultElementType)
+    return emitOpError() << "result must be a tensor of pointers";
+  
+  if (resultElementType.getPointeeType() != pointersElementType.getPointeeType())
+    return emitOpError() << "result pointer type must match input pointer type";
+  
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
+// LoadOp Implementation
+//===----------------------------------------------------------------------===//
+
+LogicalResult TensorLoadOp::verify() {
+  auto pointersType = llvm::dyn_cast<MetalTensorType>(getPointers().getType());
+  auto maskType = llvm::dyn_cast<MetalTensorType>(getMask().getType());
+  auto resultType = llvm::dyn_cast<MetalTensorType>(getResult().getType());
+  
+  if (!pointersType || !maskType || !resultType)
+    return emitOpError() << "all operands and results must be tensor types";
+  
+  // Check that shapes match
+  if (pointersType.getShape() != maskType.getShape() || 
+      pointersType.getShape() != resultType.getShape())
+    return emitOpError() << "all tensors must have the same shape";
+  
+  // Check that pointers tensor contains pointers
+  auto pointersElementType = llvm::dyn_cast<MetalPtrType>(pointersType.getElementType());
+  if (!pointersElementType)
+    return emitOpError() << "pointers operand must be a tensor of pointers";
+  
+  // Check that mask tensor contains booleans
+  auto maskElementType = maskType.getElementType();
+  if (!maskElementType.isInteger(1))
+    return emitOpError() << "mask operand must be a tensor of i1 (boolean) values";
+  
+  // Check that result element type matches pointee type
+  if (resultType.getElementType() != pointersElementType.getPointeeType())
+    return emitOpError() << "result element type must match pointer pointee type";
+  
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
+// StoreOp Implementation
+//===----------------------------------------------------------------------===//
+
+LogicalResult TensorStoreOp::verify() {
+  auto pointersType = llvm::dyn_cast<MetalTensorType>(getPointers().getType());
+  auto valuesType = llvm::dyn_cast<MetalTensorType>(getValues().getType());
+  auto maskType = llvm::dyn_cast<MetalTensorType>(getMask().getType());
+  
+  if (!pointersType || !valuesType || !maskType)
+    return emitOpError() << "all operands must be tensor types";
+  
+  // Check that shapes match
+  if (pointersType.getShape() != valuesType.getShape() || 
+      pointersType.getShape() != maskType.getShape())
+    return emitOpError() << "all tensors must have the same shape";
+  
+  // Check that pointers tensor contains pointers
+  auto pointersElementType = llvm::dyn_cast<MetalPtrType>(pointersType.getElementType());
+  if (!pointersElementType)
+    return emitOpError() << "pointers operand must be a tensor of pointers";
+  
+  // Check that mask tensor contains booleans
+  auto maskElementType = maskType.getElementType();
+  if (!maskElementType.isInteger(1))
+    return emitOpError() << "mask operand must be a tensor of i1 (boolean) values";
+  
+  // Check that values element type matches pointee type
+  if (valuesType.getElementType() != pointersElementType.getPointeeType())
+    return emitOpError() << "values element type must match pointer pointee type";
+  
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
+// TensorBinaryOp Implementation
+//===----------------------------------------------------------------------===//
+
+LogicalResult TensorBinaryOp::verify() {
+  auto lhsType = llvm::dyn_cast<MetalTensorType>(getLhs().getType());
+  auto rhsType = llvm::dyn_cast<MetalTensorType>(getRhs().getType());
+  auto resultType = llvm::dyn_cast<MetalTensorType>(getResult().getType());
+  
+  if (!lhsType || !rhsType || !resultType)
+    return emitOpError() << "all operands and results must be tensor types";
+  
+  // Check that shapes match
+  if (lhsType.getShape() != rhsType.getShape() || 
+      lhsType.getShape() != resultType.getShape())
+    return emitOpError() << "all tensors must have the same shape";
+  
+  // Check that element types match or are compatible
+  auto lhsElementType = lhsType.getElementType();
+  auto rhsElementType = rhsType.getElementType();
+  auto resultElementType = resultType.getElementType();
+  
+  // For comparison operators, result should be i1
+  using OP = mlir::metal::BinaryExpOperator;
+  switch (getOpr()) {
+  case OP::eqOp:
+  case OP::neOp:
+  case OP::ltOp:
+  case OP::leOp:
+  case OP::gtOp:
+  case OP::geOp:
+    if (!resultElementType.isInteger(1))
+      return emitOpError() << "comparison operations must return boolean tensors";
+    break;
+  default:
+    // For other operators, result type should match operand types
+    if (resultElementType != lhsElementType || resultElementType != rhsElementType)
+      return emitOpError() << "element types of operands and result must match for arithmetic operations";
+    break;
+  }
+  
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
+// TensorUnaryOp Implementation
+//===----------------------------------------------------------------------===//
+
+LogicalResult TensorUnaryOp::verify() {
+  auto inputType = llvm::dyn_cast<MetalTensorType>(getInput().getType());
+  auto resultType = llvm::dyn_cast<MetalTensorType>(getResult().getType());
+  
+  if (!inputType || !resultType)
+    return emitOpError() << "all operands and results must be tensor types";
+  
+  // Check that shapes match
+  if (inputType.getShape() != resultType.getShape())
+    return emitOpError() << "input and result tensors must have the same shape";
+  
+  // Check correct element types based on operation
+  auto inputElementType = inputType.getElementType();
+  auto resultElementType = resultType.getElementType();
+  
+  using OP = mlir::metal::UnaryExpOperator;
+  switch (getOpr()) {
+  case OP::notOp:
+    if (!inputElementType.isInteger(1))
+      return emitOpError() << "logical NOT requires boolean input tensor";
+    if (!resultElementType.isInteger(1))
+      return emitOpError() << "logical NOT must return boolean tensor";
+    break;
+  case OP::minusOp:
+    if (!inputElementType.isIntOrFloat())
+      return emitOpError() << "arithmetic negation requires numeric input tensor";
+    if (resultElementType != inputElementType)
+      return emitOpError() << "arithmetic negation must preserve element type";
+    break;
+  }
+  
+  return success();
 }
 
 //===----------------------------------------------------------------------===//

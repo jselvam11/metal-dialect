@@ -16,6 +16,7 @@
 int main(int argc, char **argv) {
   mlir::registerAllPasses();
   mlir::metal::registerMetalConversionPasses();
+  // mlir::metal::registerTritonToMetalConversionPass();
 
   mlir::DialectRegistry registry;
   registry.insert<mlir::arith::ArithDialect, mlir::cf::ControlFlowDialect,
@@ -29,3 +30,4 @@ int main(int argc, char **argv) {
   return mlir::asMainReturnCode(
       mlir::MlirOptMain(argc, argv, "Metal optimizer driver\n", registry));
 }
+
