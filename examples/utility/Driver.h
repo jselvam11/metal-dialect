@@ -8,6 +8,7 @@
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
+#include "mlir/Dialect/SCF/IR/SCF.h"
 #include "mlir/ExecutionEngine/ExecutionEngine.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/Dialect.h"
@@ -45,7 +46,10 @@ public:
     this->_metalModule = std::make_unique<mlir::metal::ModuleOp>(
         _builder->create<mlir::metal::ModuleOp>(*_loc));
     _module->push_back(*_metalModule);
+    _context->getOrLoadDialect<mlir::scf::SCFDialect>();
   }
+  mlir::ModuleOp& getModule() { return *_module; }
+  mlir::metal::ModuleOp& getMetalModule() { return *_metalModule; }
 
   void dump() { _module->dump(); }
 
